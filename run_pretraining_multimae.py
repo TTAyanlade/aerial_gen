@@ -44,7 +44,7 @@ from utils import NativeScalerWithGradNormCount as NativeScaler
 from utils import create_model
 from utils.data_constants import COCO_SEMSEG_NUM_CLASSES
 from utils.datasets import build_multimae_pretraining_dataset
-from utils.datasets import build_pretraining_dataset
+# from utils.datasets import build_pretraining_dataset
 from utils.optim_factory import create_optimizer
 from utils.task_balancing import (NoWeightingStrategy,
                                   UncertaintyWeightingStrategy)
@@ -220,7 +220,7 @@ def get_args():
     parser.set_defaults(auto_resume=True)
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N', help='start epoch')
-    parser.add_argument('--num_workers', default=2, type=int) #10
+    parser.add_argument('--num_workers', default=0, type=int) #10
     parser.add_argument('--pin_mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem',
@@ -404,7 +404,7 @@ def main(args):
 
     print(args)
 
-
+    
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
         batch_size=args.batch_size,
@@ -412,15 +412,17 @@ def main(args):
         pin_memory=args.pin_mem,
         drop_last=True,
     )
+    
     # batch = next(iter(data_loader_train))
     # image_tensor = batch[0]
     # image_array_sat = image_tensor['Sat_RGB'].numpy()[0].transpose(1, 2, 0)
-    # image_array_uav = image_tensor['UAV_RGB'].numpy()[0].transpose(1, 2, 0)
+    
+    # # image_array_uav = image_tensor['UAV_RGB'].numpy()[0].transpose(1, 2, 0)
 
     # image_sat = Image.fromarray(np.uint8(image_array_sat))
-    # image_uav = Image.fromarray(np.uint8(image_array_uav))
+    # # image_uav = Image.fromarray(np.uint8(image_array_uav))
 
-    # image_uav.save('uav.png')
+    # # image_uav.save('uav.png')
     # image_sat.save('usat.png')
     # pdb.set_trace()
 
@@ -470,16 +472,16 @@ def main(args):
 
 
 
-    ct = 0
-    print('Freezing all the layers of the encoder except the last 2 layers')
-    for child in model.encoder.children():
+    # ct = 0
+    # print('Freezing all the layers of the encoder except the last 2 layers')
+    # for child in model.encoder.children():
         
-        ct += 1
-        if ct <= 11:
-            print('Freezing encoder layer:',ct)
-            for param in child.parameters():
-                param.requires_grad = False
-    print("len(model.encoder.children())", ct)
+    #     ct += 1
+    #     if ct <= 11:
+    #         print('Freezing encoder layer:',ct)
+    #         for param in child.parameters():
+    #             param.requires_grad = False
+    # print("len(model.encoder.children())", ct)
     num_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Number of trainable parameters: {num_trainable_params}")
     # # word_to_exclude = 'UAV_RGB'
@@ -707,7 +709,7 @@ def train_one_epoch(model: torch.nn.Module, data_loader: Iterable, tasks_loss_fn
     preds = {domain: pred.detach().cpu() for domain, pred in preds.items()}
     masks = {domain: mask.detach().cpu() for domain, mask in masks.items()}
 
-    if epoch % 10 == 0:
+    if epoch % 50 == 0:
         res = plot_predictions(input_dict, preds, masks, epoch, out_path)
     
     

@@ -28,12 +28,12 @@ loss_on_unmasked: False
 # fp32_output_adapters: UAV_RGB
 
 # Data
-data_path: '/work/mech-ai/ayanlade/data/New_Ames_moreValid' 
+data_path: '/work/mech-ai/wall_data/satuav_data/Ames' #'/work/mech-ai/wall_data/satuav_data/europe/orthophoto' #'/work/mech-ai/ayanlade/data/New_Ames_moreValid' 
 
 
 # Wandb logging
-log_wandb: False # Set to True to log to Weights & Biases
-wandb_project: 'final_SatUAV'
+log_wandb: True # Set to True to log to Weights & Biases
+wandb_project: 'SU'
 wandb_entity: null # Change if needed
-wandb_run_name: "l2a_Weight_UAVothers_1_98_1_AmesMoreValid"
+wandb_run_name: "Ames_All"
 output_dir: 'pretrain/' # Change directory if needed
