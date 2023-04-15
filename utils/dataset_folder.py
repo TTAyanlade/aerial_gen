@@ -298,7 +298,7 @@ class MultiTaskDatasetFolder(VisionDataset):
             sample_dict = {}
             for task in self.tasks:
                 path, target = self.samples[task][index]
-                sample = pil_loader(path, convert_rgb=(task=='rgb'))
+                sample = pil_loader(path, convert_rgb=(task=='UAV_RGB'))
                 sample_dict[task] = sample
             # self.cache[index] = deepcopy((sample_dict, target))
 
