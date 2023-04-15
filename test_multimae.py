@@ -44,7 +44,7 @@ from utils import NativeScalerWithGradNormCount as NativeScaler
 from utils import create_model
 from utils.data_constants import COCO_SEMSEG_NUM_CLASSES
 from utils.datasets import build_multimae_pretraining_dataset
-from utils.datasets import build_pretraining_dataset
+# from utils.datasets import build_pretraining_dataset
 from utils.optim_factory import create_optimizer
 from utils.task_balancing import (NoWeightingStrategy,
                                   UncertaintyWeightingStrategy)
@@ -57,6 +57,7 @@ from utils.data_constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 import numpy as np
 from matplotlib import pyplot as plt
 from PIL import Image, ImageOps
+import PIL
 import seaborn as sns
 import pdb
 import pandas as pd
@@ -360,7 +361,7 @@ def main(args):
     model = get_model(args)
 
     
-    checkpoint = torch.load("/work/mech-ai/ayanlade/sat_uav/su_multimae/pretrain/checkpoint-1999.pth", map_location='cpu')
+    checkpoint = torch.load("/work/mech-ai/ayanlade/sat_uav/aerial_gen/pretrain_/checkpoint-599.pth", map_location='cpu')
     checkpoint_model = checkpoint['model']
     
 
@@ -374,108 +375,155 @@ def main(args):
 
 
 
-   
+
+
+
+
+
+
+
+
+    # sattest = "/work/mech-ai/ayanlade/data/New_Ames_moreValid/valid/Sat_RGB/W1/33_Ames_crop_2688_6720.jpg"
+    # uavtest = "/work/mech-ai/ayanlade/data/New_Ames_moreValid/valid/UAV_RGB/W1/33_Ames_crop_2688_6720.jpg"
+    # im = Image.open(sattest)
+    # dp = Image.open(uavtest)
+    
+
+    # input_dict = {}
+    # image_size = 224 # Train resolution
+    # img = TF.to_tensor(im)
+    # depth = TF.to_tensor(dp)
+
+    # img = TF.resize(img, image_size)
+    # depth = TF.resize(depth, image_size)
+
+    
+    # input_dict['Sat_RGB'] = TF.normalize(img, mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD).unsqueeze(0)
+    # input_dict['UAV_RGB'] = TF.normalize(depth, mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD).unsqueeze(0)
+
+
+
+    # input_dict = {k: v.to(device) for k,v in input_dict.items()}
+    # preds, masks, encoded_tokens = model(input_dict,num_encoded_tokens=294,alphas=1.0,sample_tasks_uniformly=False,samples_p_task=True)
+    # preds = {domain: pred.detach().cpu() for domain, pred in preds.items()}
+    # masks = {domain: mask.detach().cpu() for domain, mask in masks.items()}
+
+    # # if epoch % 1 == 0:
+    # epoch=1
+    # out_path ="/work/mech-ai/ayanlade/sat_uav/aerial_gen/pretrain/"
+    # res = plot_predictions(input_dict, preds, masks, epoch, out_path)
+    
+    
 
     with torch.no_grad():
 
         path_1 = "/work/mech-ai/ayanlade/data/Ames_Experimentation/Sat_RGB/W1"
         path_2 = "/work/mech-ai/ayanlade/data/Ames_Experimentation/UAV_RGB/W1"
 
-
-        # path_1 = "/work/mech-ai/ayanlade/data/New_Ames_moreValid/valid/Sat_RGB/W1"
-        # path_2 = "/work/mech-ai/ayanlade/data/New_Ames_moreValid/valid/UAV_RGB/W1"
-
-
-
-        for vi in ["gli","vari","rgbvi","ngrdi"]:
+        for vi in ["gli"] : #,"vari","rgbvi","ngrdi"]:
 
             table = []
             for item in os.listdir(path_1):
+                # if "423" in item:
+                #     continue
+                # pdb.set_trace()
                 row = {"Plotname": item}
 
                 for week in ["W1","W2","W3"]:
 
+                    if item[11] != "3":
+                        ruav = Image.open(os.path.join("/work/mech-ai/ayanlade/sat_uav/aerial_gen/prompt",week,"0uavAmes-"+week+"-"+item[8:12]+".TIF")).convert('RGB')
+                        rsat = Image.open(os.path.join("/work/mech-ai/ayanlade/sat_uav/aerial_gen/prompt",week,"0satAmes-"+week+"-"+item[8:12]+".TIF")).convert('RGB')
+                        rwidth, rheight = ruav.size
+                        rcrop_box = (8, 2, rwidth-8, rheight-2)
+                        ruav = ruav.crop(rcrop_box)
+                        rwidth, rheight = rsat.size
+                        rcrop_box = (1, 1, rwidth-1, rheight-1)
+                        rsat = rsat.crop(rcrop_box)
+                        rimage_size = (224,112) #224 # Train resolution
+                        rimg = TF.to_tensor(rsat)
+                        rdepth = TF.to_tensor(ruav)
+                        rimg = TF.resize(rimg, rimage_size, Image.Resampling.BICUBIC )
+                        rdepth = TF.resize(rdepth, rimage_size, Image.Resampling.BICUBIC )
+
+
+                    else:
+                        wruav = Image.open(os.path.join("/work/mech-ai/ayanlade/sat_uav/aerial_gen/prompt",week,"0uavAmes-"+week+"-"+item[8:12]+".TIF")).convert('RGB')
+                        wrsat = Image.open(os.path.join("/work/mech-ai/ayanlade/sat_uav/aerial_gen/prompt",week,"0satAmes-"+week+"-"+item[8:12]+".TIF")).convert('RGB')
+                        wrwidth, wrheight = wruav.size
+                        wrcrop_box = (10, 10, wrwidth-10, wrheight-10)
+                        wruav = wruav.crop(wrcrop_box)
+                        wrwidth, wrheight = wrsat.size
+                        wrcrop_box = (1, 1, wrwidth-1, wrheight-1)
+                        wrsat = wrsat.crop(wrcrop_box)
+                        wrimage_size = (112,224) #224 # Train resolution
+                        wrimg = TF.to_tensor(wrsat)
+                        wrdepth = TF.to_tensor(wruav)
+                        wrimg = TF.resize(wrimg, wrimage_size, Image.Resampling.BICUBIC)
+                        wrdepth = TF.resize(wrdepth, wrimage_size, Image.Resampling.BICUBIC)
+
+
+
                     sattest = os.path.join(path_1,item).replace("W1",week)
                     uavtest = os.path.join(path_2,item).replace("W1",week)
 
+
                     im = Image.open(sattest)
-                    # itme = Image.open(item)
                     width, height = im.size
                     crop_box = (1, 1, width-1, height-1)
                     im = im.crop(crop_box)
+
 
                     dp = Image.open(uavtest)
                     bands = dp.split()
                     if len(bands) != 3:
                         dp = Image.open(uavtest).convert('RGB')
+                    width, height = dp.size
+                    crop_box = (8, 8, width-8, height-8)
+                    dp = dp.crop(crop_box)
+
+
+                    if item[11] == "3":
+                        image_size1 = (112,224) #224 # Train resolution
+                        im = TF.to_tensor(im)
+                        dp = TF.to_tensor(dp)
+
+                        im = TF.resize(im, image_size1, Image.Resampling.BICUBIC )
+                        dp = TF.resize(dp, image_size1, Image.Resampling.BICUBIC )
+                        img = torch.cat([im, wrimg], dim=1)
+                        depth = torch.cat([dp, wrdepth], dim=1)
+                    else:
+                        image_size1 = (224,112) #224 # Train resolution
+                        im = TF.to_tensor(im)
+                        dp = TF.to_tensor(dp)
+
+                        im = TF.resize(im, image_size1,Image.Resampling.BICUBIC )
+                        dp = TF.resize(dp, image_size1, Image.Resampling.BICUBIC )
+
+                        img = torch.cat([im, rimg], dim=2)
+                        depth = torch.cat([dp, rdepth], dim=2)
+
                     
-                    im = im.resize(dp.size)
-                    mask__ = mask = Image.new('RGB', dp.size, color=(1, 1, 1))
-
-                    if dp.size[0] > 224:
-                        crop_left = (dp.size[0] - 224) // 2
-                        crop_right = crop_left + 224
-                        dp = dp.crop((crop_left, 0, crop_right, dp.size[1]))
-                        im = im.crop((crop_left, 0, crop_right, dp.size[1]))
-                        mask__ = mask__.crop((crop_left, 0, crop_right, dp.size[1]))
-
-                    if dp.size[1] > 224:
-                        crop_top = (dp.size[1] - 224) // 2
-                        crop_bottom = crop_top + 224
-                        dp = dp.crop((0, crop_top, dp.size[0], crop_bottom))
-                        im = im.crop((0, crop_top, dp.size[0], crop_bottom))
-                        mask__ = mask__.crop((0, crop_top, dp.size[0], crop_bottom))
 
 
-                    # if dp.size[0] < 224:
-                    #     padding_left = (224 - dp.size[0]) // 2
-                    #     padding_right = 224 - dp.size[0] - padding_left
-                    #     dp = ImageOps.expand(dp, (padding_left, 0, padding_right, 0), fill=(0, 0, 0))
-                    #     im = ImageOps.expand(im, (padding_left, 0, padding_right, 0), fill=(0, 0, 0))
-                    #     mask__ = ImageOps.expand(mask__, (padding_left, 0, padding_right, 0), fill=(0, 0, 0))
-                    # if dp.size[1] < 224:
-                    #     padding_top = (224 - dp.size[1]) // 2
-                    #     padding_bottom = 224 - dp.size[1] - padding_top
-                    #     dp = ImageOps.expand(dp, (0, padding_top, 0, padding_bottom), fill=(0, 0, 0))
-                    #     im = ImageOps.expand(im, (0, padding_top, 0, padding_bottom), fill=(0, 0, 0))
-                    #     mask__ = ImageOps.expand(mask__, (0, padding_top, 0, padding_bottom), fill=(0, 0, 0))
 
 
-                    # im = im.resize(dp.size)
-                    # if im.size[0] < 224:
-                    #     padding = (0, 0, 224 - im.size[0], 0)
-                    #     im = ImageOps.expand(im, padding, fill=(0, 0, 0))
-
-                    # if im.size[1] < 224:
-                    #     padding = (0, 0, 0, 224 - im.size[1])
-                    #     im = ImageOps.expand(im, padding, fill=(0, 0, 0))
-
-                    # mask__ = Image.new('1', dp.size, color=1)
-                    # if im.size[0] < 224:
-                    #     padding = (0, 0, 224 - im.size[0], 0)
-                    #     mask__ = ImageOps.expand(mask__, padding, fill=0)
-
-                    # if im.size[1] < 224:
-                    #     padding = (0, 0, 0, 224 - im.size[1])
-                    #     mask__ = ImageOps.expand(mask__, padding, fill=0)
-
-                    # if dp.size[0] < 224:
-                    #     padding = (0, 0, 224 - dp.size[0], 0)
-                    #     dp = ImageOps.expand(dp, padding, fill=(0, 0, 0))
-
-                    # if dp.size[1] < 224:
-                    #     padding = (0, 0, 0, 224 - dp.size[1])
-                    #     dp = ImageOps.expand(dp, padding, fill=(0, 0, 0))
 
 
-                    input_dict = {}
-                    image_size = (224,224) #224 # Train resolution
-                    img = TF.to_tensor(im)
-                    depth = TF.to_tensor(dp)
 
-                    img = TF.resize(img, image_size)
-                    depth = TF.resize(depth, image_size)
+
+
+
+
                     # pdb.set_trace()
+                    input_dict = {}
+                    # image_size = (224,224) #224 # Train resolution
+                    # img = TF.to_tensor(im)
+                    # depth = TF.to_tensor(dp)
+
+                    # img = TF.resize(img, image_size)
+                    # depth = TF.resize(depth, image_size)
+                    
                     
                     input_dict['Sat_RGB'] = TF.normalize(img, mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD).unsqueeze(0)
                     input_dict['UAV_RGB'] = TF.normalize(depth, mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD).unsqueeze(0)
@@ -484,7 +532,8 @@ def main(args):
                     print("loaded data")
                     
 
-                    preds, masks, encoded_tokens = model(input_dict,num_encoded_tokens=196,alphas=1.0,sample_tasks_uniformly=False,samples_p_task=True)
+                    preds, masks, encoded_tokens = model(input_dict,num_encoded_tokens=294,alphas=1.0,sample_tasks_uniformly=False,samples_p_task=True,name_img = item[11])
+                    # preds, masks, encoded_tokens = model(input_dict,num_encoded_tokens=196,alphas=1.0,sample_tasks_uniformly=False,samples_p_task=True)
                     # fp32_output_adapters= args.fp32_output_adapters.split('-'))
 
                     
@@ -493,9 +542,12 @@ def main(args):
 
                     epoch =0
                     out_path=args.output_dir
-                    sat_1_RGBVI_avg, sat_1_GLI_avg, sat_1_VARI_avg,sat_1_NGRDI_avg, sat_2_RGBVI_avg, sat_2_GLI_avg, sat_2_VARI_avg,sat_2_NGRDI_avg, uav_1_RGBVI_avg,    uav_1_GLI_avg , uav_1_VARI_avg ,    uav_1_NGRDI_avg ,    uav_2_RGBVI_avg , uav_2_GLI_avg ,    uav_2_VARI_avg , uav_2_NGRDI_avg = plot_predictions_test(input_dict, preds, masks, epoch, out_path, sattest, uavtest, mask__)
+                    sat_1_RGBVI_avg, sat_1_GLI_avg, sat_1_VARI_avg,sat_1_NGRDI_avg, sat_2_RGBVI_avg, sat_2_GLI_avg, sat_2_VARI_avg,sat_2_NGRDI_avg, uav_1_RGBVI_avg,    uav_1_GLI_avg , uav_1_VARI_avg ,    uav_1_NGRDI_avg ,    uav_2_RGBVI_avg , uav_2_GLI_avg ,    uav_2_VARI_avg , uav_2_NGRDI_avg = plot_predictions_test(input_dict, preds, masks, epoch, out_path, sattest, uavtest, item[11])
                     
-
+                    epoch=sattest.split("/")[-1][:-4]
+                    out_path="/work/mech-ai/ayanlade/sat_uav/aerial_gen/Test/"
+                    res = plot_predictions(input_dict, preds, masks, epoch, out_path)
+    
                     row[week + "_s_real"] = sat_1_GLI_avg if vi == "gli" else sat_1_VARI_avg if vi == "vari" else sat_1_RGBVI_avg if vi == "rgbvi" else sat_1_NGRDI_avg
                     row[week + "_s_pred"] = sat_2_GLI_avg if vi == "gli" else sat_2_VARI_avg if vi == "vari" else sat_2_RGBVI_avg if vi == "rgbvi" else sat_2_NGRDI_avg
                     row[week + "_u_real"] = uav_1_GLI_avg if vi == "gli" else uav_1_VARI_avg if vi == "vari" else uav_1_RGBVI_avg if vi == "rgbvi" else uav_1_NGRDI_avg

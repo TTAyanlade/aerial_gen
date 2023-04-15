@@ -28,7 +28,7 @@ loss_on_unmasked: False
 # fp32_output_adapters: UAV_RGB
 
 # Data
-data_path: '/work/mech-ai/wall_data/satuav_data/europe/orthophoto' #'/work/mech-ai/wall_data/satuav_data/Ames' #
+data_path: '/work/mech-ai/wall_data/satuav_data/Ames' #'/work/mech-ai/wall_data/satuav_data/europe/orthophoto' # #
 
 
 # Wandb logging

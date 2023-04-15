@@ -473,17 +473,17 @@ def main(args):
         args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
 
 
-    pdb.set_trace()
 
-    ct = 0
-    print('Freezing all the layers of the encoder except the last 2 layers')
-    for child in model.output_adapters.children():
-        for param in child.parameters():
-            param.requires_grad = False
-    print('Freezing all the layers of the encoder except the last 2 layers')
-    for child in model.input_adapters.children():
-        for param in child.parameters():
-            param.requires_grad = False
+
+    # ct = 0
+    # print('Freezing all the layers of the encoder except the last 2 layers')
+    # for child in model.output_adapters.children():
+    #     for param in child.parameters():
+    #         param.requires_grad = False
+    # print('Freezing all the layers of the encoder except the last 2 layers')
+    # for child in model.input_adapters.children():
+    #     for param in child.parameters():
+    #         param.requires_grad = False
 
     ct = 0
     print('Freezing all the layers of the encoder except the last 2 layers')
@@ -586,7 +586,7 @@ def main(args):
             input_dict['UAV_RGB'] = torch.cat(uav_imgs, dim=0).to(device)
 
             # pass input through model and get predictions
-            preds, _, _,_,_ = model(input_dict, num_encoded_tokens=196, alphas=1.0, sample_tasks_uniformly=False, samples_p_task=True)
+            preds, masks, encoded_tokens ,_,_ = model(input_dict, num_encoded_tokens=98, alphas=1.0, sample_tasks_uniformly=False, samples_p_task=False)
             sat_preds = preds['Sat_RGB']
             uav_preds = preds['UAV_RGB']
 
@@ -608,6 +608,12 @@ def main(args):
             plt.xlabel('Epoch')
             plt.ylabel('MSE Loss')
             plt.savefig(os.path.join('pretrain',str(epoch)+'_mse_loss.png'))
+
+        preds = {domain: pred.detach().cpu() for domain, pred in preds.items()}
+        masks = {domain: mask.detach().cpu() for domain, mask in masks.items()}
+        out_path ="/work/mech-ai/ayanlade/sat_uav/aerial_gen/pretrain/"
+        if epoch % 1 == 0:
+            res = plot_predictions(input_dict, preds, masks, epoch, out_path)
         
 
 
@@ -680,7 +686,7 @@ def train_one_epoch(model: torch.nn.Module, data_loader: Iterable, tasks_loss_fn
         }
 
         with torch.cuda.amp.autocast():
-            preds, masks, encoded_tokens, vmu, vvar = model( 
+            preds, masks, encoded_tokens, mu, logVar = model( 
                 input_dict, 
                 num_encoded_tokens=num_encoded_tokens, 
                 alphas=alphas, 
@@ -694,22 +700,28 @@ def train_one_epoch(model: torch.nn.Module, data_loader: Iterable, tasks_loss_fn
                         tasks_dict['norm_'+k] = tasks_dict[k]
                         masks['norm_'+k] = masks.get(k, None)
 
+            logVar = F.softplus(logVar)
+            mu = F.softplus(mu) 
+            kl_divergence = -0.5 * torch.sum(torch.mean(1 + logVar - mu.pow(2) - logVar.exp()))
+            # loss = loss + kl_divergence
+            print("heerreeeeeeeeee",kl_divergence)
 
             task_losses = {}
             for task in preds:
                 target = tasks_dict[task]
                     
                 if loss_on_unmasked:
-                    task_losses[task] = tasks_loss_fn[task](preds[task].float(), target) 
+                    task_losses[task] = tasks_loss_fn[task](preds[task].float(), target)+ kl_divergence 
                 else:
-                    task_losses[task] = tasks_loss_fn[task](preds[task].float(), target, mask=masks.get(task, None))
-
+                    task_losses[task] = tasks_loss_fn[task](preds[task].float(), target, mask=masks.get(task, None))+ kl_divergence
+            
             weighted_task_losses = loss_balancer(task_losses)
-            loss = sum(weighted_task_losses.values())
+            loss = sum(weighted_task_losses.values()) 
+
 
 
         loss_value = sum(task_losses.values()).item()
-        pdb.set_trace()
+        # pdb.set_trace()
         task_loss_values = {f'{task}_loss': l.item() for task, l in task_losses.items()}
         weighted_task_loss_values = {f'{task}_loss_weighted': l.item() for task, l in weighted_task_losses.items()}
 
