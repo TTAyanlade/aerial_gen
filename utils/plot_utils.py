@@ -215,26 +215,16 @@ def plot_predictions(input_dict, preds, masks, id, out_path, image_size=224):
 
 
 
-def plot_predictions_test(input_dict, preds, masks, id, out_path,sattest,uavtest, name__, image_size=224):
+def plot_predictions_test(input_dict, preds, masks, id, out_path,sattest,uavtest, mask__, image_size=224):
+    # pdb.set_trace()
     pred_Sat = denormalize(preds['Sat_RGB'])[0].permute(1,2,0).clamp(0,1) #* TF.to_tensor(mask__).T
     pred_rgb = denormalize(preds['UAV_RGB'])[0].permute(1,2,0).clamp(0,1)#* TF.to_tensor(mask__).T
 
     sat_in = denormalize(input_dict['Sat_RGB'])[0].permute(1,2,0).detach().cpu()#* TF.to_tensor(mask__).T
     uav_in = denormalize(input_dict['UAV_RGB'])[0].permute(1,2,0).detach().cpu()#* TF.to_tensor(mask__).T
-   
+    # pdb.set_trace()
 
-    if name__ == "3":
-        pred_Sat = pred_Sat[:112,:,:]
-        pred_rgb = pred_rgb[:112,:,:]
 
-        sat_in = sat_in[:112,:,:]
-        uav_in = uav_in[:112,:,:]
-    else:
-        pred_Sat = pred_Sat[:,:112,:]
-        pred_rgb = pred_rgb[:,:112,:]
-
-        sat_in = sat_in[:,:112,:]
-        uav_in = uav_in[:,:112,:]
 
 
     sat_1_RGBVI_avg = calculate_indices_avg(sat_in, "RGBVI")
@@ -260,14 +250,14 @@ def plot_predictions_test(input_dict, preds, masks, id, out_path,sattest,uavtest
     uav_2_NGRDI_avg = calculate_indices_avg(pred_rgb, "NGRDI")
 
 
-    sattest = sattest.split("/")[-1][:-4]+sattest.split("/")[-2]+".png"
-    uavtest = uavtest.split("/")[-1][:-4]+uavtest.split("/")[-2]+".png"
+    sattest = sattest.split("/")[-1][:-4]+sattest.split("/")[-2]+".jpg"
+    uavtest = uavtest.split("/")[-1][:-4]+uavtest.split("/")[-2]+".jpg"
     # pdb.set_trace()
 
-    torchvision.utils.save_image(pred_Sat.T, "/work/mech-ai/ayanlade/sat_uav/aerial_gen/output/gen/sat/"+sattest)
-    torchvision.utils.save_image(pred_rgb.T, "/work/mech-ai/ayanlade/sat_uav/aerial_gen/output/gen/uav/"+uavtest)
-    torchvision.utils.save_image(sat_in.T, "/work/mech-ai/ayanlade/sat_uav/aerial_gen/output/in/sat/"+sattest)
-    torchvision.utils.save_image(uav_in.T, "/work/mech-ai/ayanlade/sat_uav/aerial_gen/output/in/uav/"+uavtest)
+    torchvision.utils.save_image(pred_Sat.T, "/work/mech-ai/ayanlade/sat_uav/su_multimae/output/gen/sat/"+sattest)
+    torchvision.utils.save_image(pred_rgb.T, "/work/mech-ai/ayanlade/sat_uav/su_multimae/output/gen/uav/"+uavtest)
+    torchvision.utils.save_image(sat_in.T, "/work/mech-ai/ayanlade/sat_uav/su_multimae/output/in/sat/"+sattest)
+    torchvision.utils.save_image(uav_in.T, "/work/mech-ai/ayanlade/sat_uav/su_multimae/output/in/uav/"+uavtest)
     
     
     return  sat_1_RGBVI_avg, sat_1_GLI_avg, sat_1_VARI_avg,sat_1_NGRDI_avg, sat_2_RGBVI_avg, sat_2_GLI_avg, sat_2_VARI_avg,sat_2_NGRDI_avg, uav_1_RGBVI_avg,    uav_1_GLI_avg , uav_1_VARI_avg ,    uav_1_NGRDI_avg ,    uav_2_RGBVI_avg , uav_2_GLI_avg ,    uav_2_VARI_avg , uav_2_NGRDI_avg 
