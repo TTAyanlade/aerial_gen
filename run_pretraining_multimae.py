@@ -59,7 +59,9 @@ from matplotlib import pyplot as plt
 from PIL import Image
 import seaborn as sns
 import pdb
-
+import glob
+import torch.nn.functional as F
+Image.MAX_IMAGE_PIXELS = None
 
 DOMAIN_CONF = {
     'Sat_RGB': {
@@ -471,16 +473,27 @@ def main(args):
         args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
 
 
+    pdb.set_trace()
 
-    # ct = 0
-    # print('Freezing all the layers of the encoder except the last 2 layers')
-    # for child in model.encoder.children():
+    ct = 0
+    print('Freezing all the layers of the encoder except the last 2 layers')
+    for child in model.output_adapters.children():
+        for param in child.parameters():
+            param.requires_grad = False
+    print('Freezing all the layers of the encoder except the last 2 layers')
+    for child in model.input_adapters.children():
+        for param in child.parameters():
+            param.requires_grad = False
+
+    ct = 0
+    print('Freezing all the layers of the encoder except the last 2 layers')
+    for child in model.encoder.children():
         
-    #     ct += 1
-    #     if ct <= 11:
-    #         print('Freezing encoder layer:',ct)
-    #         for param in child.parameters():
-    #             param.requires_grad = False
+        ct += 1
+        if ct <= 11:
+            print('Freezing encoder layer:',ct)
+            for param in child.parameters():
+                param.requires_grad = False
     # print("len(model.encoder.children())", ct)
     num_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Number of trainable parameters: {num_trainable_params}")
@@ -494,7 +507,18 @@ def main(args):
     #         print('Freezing module:', name)
     #     else:
     #         print(' ')
+    # num_trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # print(f"Number of trainable parameters: {num_trainable_params}")
 
+
+    # define batch size
+    batch_size = 32
+    # define transforms to resize and normalize images
+    image_size = (224, 224)
+    # define lists to store losses and plot data
+    sat_losses = []
+    uav_losses = []
+    tepochs = []
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
@@ -528,6 +552,68 @@ def main(args):
             # fp32_output_adapters=args.fp32_output_adapters.split('-'),
             out_path=args.output_dir
         )
+
+        
+        with torch.no_grad():
+
+            sat_imgs = []
+            uav_imgs = []
+            imagepath = glob.glob( "/work/mech-ai/wall_data/satuav_data/Ames/Valid_Set/Sat_RGB/**/*.png")
+
+            for i in range(batch_size):
+                sat_img_path = imagepath[i] #os.path.join(sat_path, folder_name, f"{img_name}.png")
+                sat_img = Image.open(sat_img_path).convert('RGB')
+
+                # load UAV image and crop
+                uav_img_path = sat_img_path.replace("Sat_RGB","UAV_RGB") #os.path.join(uav_path, folder_name, f"{img_name}.png")
+                uav_img = Image.open(uav_img_path).convert('RGB')
+
+                sat_img = TF.to_tensor(sat_img)
+                sat_img = TF.center_crop(sat_img, image_size)
+                sat_img = TF.normalize(sat_img, mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD).unsqueeze(0)
+                
+                uav_img = TF.to_tensor(uav_img)
+                uav_img = TF.center_crop(uav_img, image_size)
+                uav_img = TF.normalize(uav_img, mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD).unsqueeze(0)
+                
+                sat_imgs.append(sat_img)
+                uav_imgs.append(uav_img)
+
+            
+            # concatenate input tensors along the batch dimension
+            input_dict = {}
+            input_dict['Sat_RGB'] = torch.cat(sat_imgs, dim=0).to(device)
+            input_dict['UAV_RGB'] = torch.cat(uav_imgs, dim=0).to(device)
+
+            # pass input through model and get predictions
+            preds, _, _,_,_ = model(input_dict, num_encoded_tokens=196, alphas=1.0, sample_tasks_uniformly=False, samples_p_task=True)
+            sat_preds = preds['Sat_RGB']
+            uav_preds = preds['UAV_RGB']
+
+            # calculate loss between predictions and input images
+            sat_loss = F.mse_loss(sat_preds, input_dict['Sat_RGB'])
+            uav_loss = F.mse_loss(uav_preds, input_dict['UAV_RGB'])
+
+            # save losses and epoch number for plotting later
+            sat_losses.append(sat_loss.item())
+            uav_losses.append(uav_loss.item())
+            tepochs.append(epoch)
+
+        # plot losses over epochs
+        if epoch%50 == 0:
+            plt.clf() 
+            plt.plot(tepochs, sat_losses, label='Sat_RGB')
+            plt.plot(tepochs, uav_losses, label='UAV_RGB')
+            plt.legend()
+            plt.xlabel('Epoch')
+            plt.ylabel('MSE Loss')
+            plt.savefig(os.path.join('pretrain',str(epoch)+'_mse_loss.png'))
+        
+
+
+
+
+
         if log_writer is not None:
             log_writer.update({**{k: v for k, v in train_stats.items()}, 'epoch': epoch})
         if args.output_dir:
@@ -546,6 +632,8 @@ def main(args):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+
+
 
 
 def train_one_epoch(model: torch.nn.Module, data_loader: Iterable, tasks_loss_fn: Dict[str, torch.nn.Module],
@@ -592,7 +680,7 @@ def train_one_epoch(model: torch.nn.Module, data_loader: Iterable, tasks_loss_fn
         }
 
         with torch.cuda.amp.autocast():
-            preds, masks, encoded_tokens = model( 
+            preds, masks, encoded_tokens, vmu, vvar = model( 
                 input_dict, 
                 num_encoded_tokens=num_encoded_tokens, 
                 alphas=alphas, 
@@ -621,6 +709,7 @@ def train_one_epoch(model: torch.nn.Module, data_loader: Iterable, tasks_loss_fn
 
 
         loss_value = sum(task_losses.values()).item()
+        pdb.set_trace()
         task_loss_values = {f'{task}_loss': l.item() for task, l in task_losses.items()}
         weighted_task_loss_values = {f'{task}_loss_weighted': l.item() for task, l in weighted_task_losses.items()}
 
@@ -671,58 +760,6 @@ def train_one_epoch(model: torch.nn.Module, data_loader: Iterable, tasks_loss_fn
         if lr_scheduler is not None:
             lr_scheduler.step_update(start_steps + step)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    sattest = "/work/mech-ai/ayanlade/data/New_Ames_moreValid/valid/Sat_RGB/W1/33_Ames_crop_2688_6720.jpg"
-    uavtest = "/work/mech-ai/ayanlade/data/New_Ames_moreValid/valid/UAV_RGB/W1/33_Ames_crop_2688_6720.jpg"
-    im = Image.open(sattest)
-    dp = Image.open(uavtest)
-    
-
-    input_dict = {}
-    image_size = 224 # Train resolution
-    img = TF.to_tensor(im)
-    depth = TF.to_tensor(dp)
-
-    img = TF.resize(img, image_size)
-    depth = TF.resize(depth, image_size)
-
-    
-    input_dict['Sat_RGB'] = TF.normalize(img, mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD).unsqueeze(0)
-    input_dict['UAV_RGB'] = TF.normalize(depth, mean=IMAGENET_DEFAULT_MEAN, std=IMAGENET_DEFAULT_STD).unsqueeze(0)
-
-
-
-    input_dict = {k: v.to(device) for k,v in input_dict.items()}
-    preds, masks, encoded_tokens = model(input_dict,num_encoded_tokens=196,alphas=1.0,sample_tasks_uniformly=False,samples_p_task=True)
-    preds = {domain: pred.detach().cpu() for domain, pred in preds.items()}
-    masks = {domain: mask.detach().cpu() for domain, mask in masks.items()}
-
-    if epoch % 50 == 0:
-        res = plot_predictions(input_dict, preds, masks, epoch, out_path)
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
         # gather the stats from all processes
     metric_logger.synchronize_between_processes()

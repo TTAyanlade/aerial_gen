@@ -100,6 +100,16 @@ class MultiMAE(nn.Module):
             for i in range(depth)
         ])
 
+# ===========================================================================================
+        #Variational Encoder Implementation
+        featureDim = 99*768
+        zDim = 256
+        self.encFC1 = nn.Linear(featureDim, zDim)
+        self.encFC2 = nn.Linear(featureDim, zDim)
+        
+        # Initializing the fully-connected layer and 2 convolutional layers for decoder
+        self.decFC1 = nn.Linear(zDim, featureDim)
+# ===========================================================================================
 
 
         self.apply(self._init_weights)
@@ -174,7 +184,8 @@ class MultiMAE(nn.Module):
                             num_encoded_tokens: int,
                             alphas: Union[float, List[float]] = 1.0,
                             sample_tasks_uniformly: bool = False,
-                            samples_p_task: bool = False) :
+                            samples_p_task: bool = False,
+                            name_img: str="a",) :
         """
         Sample a total of num_encoded_tokens from different tasks using Dirichlet sampling.
 
@@ -194,23 +205,41 @@ class MultiMAE(nn.Module):
             task_sampling_dist = Dirichlet(alphas).sample().to(device)
         else:
             task_sampling_dist = Dirichlet(torch.Tensor(alphas)).sample((B,)).to(device)
+
         if samples_p_task:
-            samples_per_task = torch.tensor([[196, 0]], device='cuda:0')
+            # samples_per_task = torch.tensor([[196, 0]], device='cuda:0')
+            samples_per_task = torch.tensor([[196, 98]], device='cuda:0')
+
         else:
             samples_per_task = (task_sampling_dist * num_encoded_tokens).round().long()
-        
+
 
         task_masks = []
         num_tokens_per_task = [task_tokens.shape[1] for task_tokens in input_tokens.values()]
+        
+        # pdb.set_trace()
         for i, num_tokens in enumerate(num_tokens_per_task):
-            # Use noise to shuffle arange
-            noise = torch.rand(B, num_tokens, device=device)  # noise in [0, 1]
-            ids_arange_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
-            mask = torch.arange(num_tokens, device=device).unsqueeze(0).expand(B, -1)
-            mask = torch.gather(mask, dim=1, index=ids_arange_shuffle)
-            # 0 is keep (unmasked), 1 is remove (masked)
-            mask = torch.where(mask < samples_per_task[:, i].unsqueeze(1), 0, 1)
+            if samples_per_task[:, i] != 196:
+                # top half
+                if int(name_img) == 3:
+                    mask = torch.ones((B, num_tokens), device=device)
+                    mask[:,num_tokens-98:] = 0
+                # right half
+                elif int(name_img) == 2 or int(name_img) == 1: 
+                    mask = torch.tensor([1,1,1,1,1,1,1,0,0,0,0,0,0,0]*14, device=device)
+                    mask=mask.reshape(1, -1)
+                else:
+                    pdb.set_trace()
+            else:
+                # Use noise to shuffle arange
+                noise = torch.rand(B, num_tokens, device=device)  # noise in [0, 1]
+                ids_arange_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+                mask = torch.arange(num_tokens, device=device).unsqueeze(0).expand(B, -1)
+                mask = torch.gather(mask, dim=1, index=ids_arange_shuffle)
+                # 0 is keep (unmasked), 1 is remove (masked)
+                mask = torch.where(mask < samples_per_task[:, i].unsqueeze(1), 0, 1)
             task_masks.append(mask)
+
 
         mask_all = torch.cat(task_masks, dim=1)
         ids_shuffle = torch.argsort(mask_all, dim=1)
@@ -227,7 +256,36 @@ class MultiMAE(nn.Module):
         # Convert to dict
         task_masks = {domain: mask for domain, mask in zip(input_tokens.keys(), task_masks)}
 
-        return task_masks, ids_keep, ids_restore
+        return task_masks, ids_keep, ids_restore        
+
+        # task_masks = []
+        # num_tokens_per_task = [task_tokens.shape[1] for task_tokens in input_tokens.values()]
+        # for i, num_tokens in enumerate(num_tokens_per_task):
+        #     # Use noise to shuffle arange
+        #     noise = torch.rand(B, num_tokens, device=device)  # noise in [0, 1]
+        #     ids_arange_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+        #     mask = torch.arange(num_tokens, device=device).unsqueeze(0).expand(B, -1)
+        #     mask = torch.gather(mask, dim=1, index=ids_arange_shuffle)
+        #     # 0 is keep (unmasked), 1 is remove (masked)
+        #     mask = torch.where(mask < samples_per_task[:, i].unsqueeze(1), 0, 1)
+        #     task_masks.append(mask)
+
+        # mask_all = torch.cat(task_masks, dim=1)
+        # ids_shuffle = torch.argsort(mask_all, dim=1)
+        # ids_restore = torch.argsort(ids_shuffle, dim=1)
+        # ids_keep = ids_shuffle[:, :num_encoded_tokens]
+
+        # # Update binary mask to adjust for task rounding
+        # mask_all = torch.ones_like(mask_all)
+        # mask_all[:, :num_encoded_tokens] = 0
+        # # Unshuffle to get the binary mask
+        # mask_all = torch.gather(mask_all, dim=1, index=ids_restore)
+        # # Split to get task masks
+        # task_masks = torch.split(mask_all, num_tokens_per_task, dim=1)
+        # # Convert to dict
+        # task_masks = {domain: mask for domain, mask in zip(input_tokens.keys(), task_masks)}
+
+        # return task_masks, ids_keep, ids_restore
 
     @staticmethod
     def make_mask(N_H, N_W, xy_idxs, full_tasks=[], indicate_visible=True, flatten=True, device='cuda'):
@@ -288,6 +346,7 @@ class MultiMAE(nn.Module):
                 alphas: Union[float, List[float]] = 1.0,
                 sample_tasks_uniformly: bool = False,
                 samples_p_task: bool = False,
+                name_img: str="a",
                 fp32_output_adapters: List[str] = []):
         """
         Forward pass through input adapters, transformer encoder and output adapters.
@@ -343,7 +402,8 @@ class MultiMAE(nn.Module):
                 num_encoded_tokens,
                 alphas=alphas,
                 sample_tasks_uniformly=sample_tasks_uniformly,
-                samples_p_task = samples_p_task
+                samples_p_task = samples_p_task,
+                name_img = name_img,
             )
         else:
             mask_all = torch.cat([task_masks[task] for task in input_task_tokens.keys()], dim=1)
@@ -365,28 +425,28 @@ class MultiMAE(nn.Module):
 
 # ================================================================================================
 
-        # vae_x = encoder_tokens
-        # print("befooooooorrrrreeeeee",encoder_tokens)
-        # # pdb.set_trace()
-        # vae_x = vae_x.view(-1, 99*768)
-        # vae_mu = self.encFC1(vae_x)
-        # vae_logVar = self.encFC2(vae_x)
-        # # print(vae_mu.shape,vae_logVar.shape)
+        vae_x = encoder_tokens
+        print("befooooooorrrrreeeeee",encoder_tokens)
+        # pdb.set_trace()
+        vae_x = vae_x.view(-1, 99*768)
+        vae_mu = self.encFC1(vae_x)
+        vae_logVar = self.encFC2(vae_x)
+        # print(vae_mu.shape,vae_logVar.shape)
         
-        # vae_z1 = self.vae_reparameterize(vae_mu, vae_logVar)
-        # vae_z2 = F.relu(self.decFC1(vae_z1))
-        # vae_z3 = vae_z2.view(-1, 99, 768)
+        vae_z1 = self.vae_reparameterize(vae_mu, vae_logVar)
+        vae_z2 = F.relu(self.decFC1(vae_z1))
+        vae_z3 = vae_z2.view(-1, 99, 768)
 
       
-        # encoder_tokens = vae_z3
-        # print("afffffftttttteeeerrrrr",encoder_tokens)
+        encoder_tokens = vae_z3
+        print("afffffftttttteeeerrrrr",encoder_tokens)
       
-        # # print(encoder_tokens.shape)
-        # # print(245678990778785643231324556789088776545342323235465767)
-        # # print(245678990778785643231324556789088776545342323235465767)
-        # # print(245678990778785643231324556789088776545342323235465767)
-        # pdb.set_trace()
-        # # vae_mu, vae_logVar = None, None
+        # print(encoder_tokens.shape)
+        # print(245678990778785643231324556789088776545342323235465767)
+        # print(245678990778785643231324556789088776545342323235465767)
+        # print(245678990778785643231324556789088776545342323235465767)
+        pdb.set_trace()
+        # vae_mu, vae_logVar = None, None
         
 # ================================================================================================
 
@@ -419,7 +479,7 @@ class MultiMAE(nn.Module):
                     ids_restore=ids_restore,
                 )
 # ================================================================================================        
-        return preds, task_masks, encoder_tokens #, vae_mu, vae_logVar
+        return preds, task_masks, encoder_tokens, vae_mu, vae_logVar
 # ================================================================================================
 
 
